@@ -1,0 +1,33 @@
+name: Octopus
+options:
+  bundleIdPrefix: com.octopus
+  deploymentTarget:
+    macOS: "26.0"
+  createIntermediateGroups: true
+targets:
+  Octopus:
+    type: application
+    platform: macOS
+    sources: [Octopus]
+    info:
+      path: Octopus/Info.plist
+      properties:
+        CFBundleDisplayName: Octopus
+        CFBundleIconFile: AppIcon
+        NSPrincipalClass: NSApplication
+        LSUIElement: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.octopus.Octopus
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: minimal
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "Apple Development"
+        DEVELOPMENT_TEAM: "38R9V4X5TU"
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        GENERATE_INFOPLIST_FILE: NO
+        ENABLE_HARDENED_RUNTIME: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        MACOSX_DEPLOYMENT_TARGET: "26.0"
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks"
