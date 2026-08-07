@@ -68,8 +68,36 @@ final class ZoneStore: ObservableObject {
     }
     @Published var monitoringEnabled = false
     @Published var activeZone: ScreenZone?
+    @Published var feedbackEffect: TriggerFeedbackEffect {
+        didSet {
+            UserDefaults.standard.set(feedbackEffect.rawValue, forKey: Self.feedbackEffectKey)
+            if feedbackEffect == .none { feedback.hideAll() }
+        }
+    }
+    @Published var feedbackEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(feedbackEnabled, forKey: Self.feedbackEnabledKey)
+            if !feedbackEnabled { feedback.hideAll() }
+        }
+    }
+    @Published var feedbackScale: Double {
+        didSet {
+            UserDefaults.standard.set(feedbackScale, forKey: Self.feedbackScaleKey)
+        }
+    }
+    @Published var soundEffect: TriggerSound {
+        didSet {
+            UserDefaults.standard.set(soundEffect.rawValue, forKey: Self.soundEffectKey)
+        }
+    }
+    @Published var soundVolume: Double {
+        didSet {
+            UserDefaults.standard.set(soundVolume, forKey: Self.soundVolumeKey)
+        }
+    }
 
     let engine = TriggerEngine()
+    lazy var feedback = TriggerFeedbackManager(store: self)
 
     private let container: ModelContainer
     private let context: ModelContext
@@ -81,6 +109,11 @@ final class ZoneStore: ObservableObject {
     static let didFirstAutoStartKey = "octopus.didFirstAutoStart"
     static let ghostingEnabledKey = "octopus.ghostingEnabled"
     static let ghostingSecondsKey = "octopus.ghostingSeconds"
+    static let feedbackEffectKey = "octopus.feedbackEffect"
+    static let feedbackEnabledKey = "octopus.feedbackEnabled"
+    static let feedbackScaleKey = "octopus.feedbackScale"
+    static let soundEffectKey = "octopus.soundEffect"
+    static let soundVolumeKey = "octopus.soundVolume"
 
     init() {
         let schema = Schema([ZoneAssignment.self])
@@ -105,6 +138,28 @@ final class ZoneStore: ObservableObject {
         }
         let seconds = defaults.integer(forKey: Self.ghostingSecondsKey)
         ghostingSeconds = [3, 5, 7, 9].contains(seconds) ? seconds : 5
+        if let raw = defaults.string(forKey: Self.feedbackEffectKey),
+           let effect = TriggerFeedbackEffect(rawValue: raw) {
+            feedbackEffect = effect
+        } else {
+            feedbackEffect = .none
+        }
+        feedbackEnabled = defaults.object(forKey: Self.feedbackEnabledKey) == nil
+            ? false
+            : defaults.bool(forKey: Self.feedbackEnabledKey)
+        let storedScale = defaults.double(forKey: Self.feedbackScaleKey)
+        feedbackScale = storedScale > 0 ? min(max((storedScale * 2).rounded() / 2, 0.5), 2.0) : 1.0
+        if let raw = defaults.string(forKey: Self.soundEffectKey),
+           let sound = TriggerSound(rawValue: raw) {
+            soundEffect = sound
+        } else {
+            soundEffect = .none
+        }
+        if defaults.object(forKey: Self.soundVolumeKey) == nil {
+            soundVolume = 0.7
+        } else {
+            soundVolume = min(max(defaults.double(forKey: Self.soundVolumeKey), 0), 1)
+        }
         engine.triggerCooldown = effectiveCooldown()
 
         seedIfNeeded()
@@ -113,6 +168,7 @@ final class ZoneStore: ObservableObject {
         engine.onZoneTrigger = { [weak self] zone in
             guard let self else { return }
             guard let action = self.action(for: zone) else { return }
+            self.feedback.trigger(zone: zone)
             ActionDispatcher.execute(action: action)
         }
         engineCancellable = engine.$currentActiveZone
@@ -212,6 +268,7 @@ final class ZoneStore: ObservableObject {
         } else {
             engine.stopMonitoring()
             monitoringEnabled = false
+            feedback.hideAll()
         }
     }
 

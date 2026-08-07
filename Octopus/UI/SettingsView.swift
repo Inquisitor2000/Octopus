@@ -9,6 +9,7 @@ struct SettingsView: View {
     @State private var atLogin = SMAppService.mainApp.status == .enabled
     @State private var showGhostingInfo = false
     @State private var showDwellInfo = false
+    @State private var showFeedbackInfo = false
 
     var body: some View {
         Form {
@@ -16,9 +17,12 @@ struct SettingsView: View {
                 monitorLoginRow
                 dwellRow
                 ghostingRow
+                feedbackRow
+                soundRow
                 accessibilityRow
             } header: {
                 Label("Monitoring", systemImage: "cursorarrow.motionlines")
+                    .padding(.top, -16)
             }
 
             Section {
@@ -28,11 +32,12 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             } header: {
                 Label("Zones", systemImage: "square.grid.3x3")
+                    .padding(.top, -16)
             }
         }
         .formStyle(.grouped)
-        .padding(EdgeInsets(top: 4, leading: 16, bottom: 16, trailing: 16))
-        .frame(minWidth: 640, minHeight: 620)
+        .padding(EdgeInsets(top: 4, leading: 16, bottom: 8, trailing: 16))
+        .frame(minWidth: 760, minHeight: 680)
         .sheet(item: $editingZone) { zone in
             ZoneEditView(store: store, zone: zone)
         }
@@ -171,6 +176,96 @@ struct SettingsView: View {
                 set: { store.ghostingSeconds = min(max(Int($0.rounded()), 3), 9) }
             ), in: 3...9, step: 2)
             .disabled(!store.ghostingEnabled)
+            .frame(maxWidth: 240)
+        }
+    }
+
+    private var feedbackRow: some View {
+        HStack(spacing: 8) {
+            HStack(spacing: 4) {
+                Text("Trigger effect")
+                Button {
+                    showFeedbackInfo = true
+                } label: {
+                    Image(systemName: "questionmark.circle")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Shows a visual effect right before a zone action fires.")
+                .popover(isPresented: $showFeedbackInfo, arrowEdge: .bottom) {
+                    Text("Shows a visual effect right before a zone action fires. Dwell Glow pulses at the corner, Edge Flash flares along the screen edge. Size scales every effect.")
+                        .font(.callout)
+                        .padding(10)
+                        .frame(width: 230)
+                }
+            }
+            .frame(width: 130, alignment: .leading)
+            Toggle("Trigger effect", isOn: Binding(
+                get: { store.feedbackEnabled },
+                set: { store.feedbackEnabled = $0 }
+            ))
+            .labelsHidden()
+            .toggleStyle(.switch)
+            Divider()
+                .frame(height: 20)
+            Picker("Effect", selection: Binding(
+                get: { store.feedbackEffect },
+                set: { store.feedbackEffect = $0 }
+            )) {
+                ForEach(TriggerFeedbackEffect.allCases) { effect in
+                    Text(effect.displayName).tag(effect)
+                }
+            }
+            .labelsHidden()
+            .disabled(!store.feedbackEnabled)
+            .padding(.leading, -6)
+            .frame(width: 104, alignment: .leading)
+            Divider()
+                .frame(height: 20)
+                .padding(.trailing, 8)
+            Text("Size: \(Int(store.feedbackScale * 100))%")
+                .monospacedDigit()
+                .foregroundStyle(store.feedbackEnabled ? Color.primary : Color.secondary)
+            Spacer()
+            Slider(value: Binding(
+                get: { store.feedbackScale },
+                set: { store.feedbackScale = $0 }
+            )            , in: 0.5...2.0, step: 0.5)
+            .disabled(!store.feedbackEnabled)
+            .frame(maxWidth: 240)
+        }
+    }
+
+    private var soundRow: some View {
+        HStack(spacing: 8) {
+            Spacer()
+                .frame(width: 174)
+            Divider()
+                .frame(height: 20)
+            Picker("Sound", selection: Binding(
+                get: { store.soundEffect },
+                set: { store.soundEffect = $0 }
+            )) {
+                ForEach(TriggerSound.allCases) { sound in
+                    Text(sound.displayName).tag(sound)
+                }
+            }
+            .labelsHidden()
+            .disabled(!store.feedbackEnabled)
+            .padding(.leading, -6)
+            .frame(width: 104, alignment: .leading)
+            Divider()
+                .frame(height: 20)
+                .padding(.trailing, 8)
+            Text("Volume: \(Int(store.soundVolume * 100))%")
+                .monospacedDigit()
+                .foregroundStyle(store.feedbackEnabled ? Color.primary : Color.secondary)
+            Spacer()
+            Slider(value: Binding(
+                get: { store.soundVolume },
+                set: { store.soundVolume = $0 }
+            ), in: 0...1, step: 0.1)
+            .disabled(!store.feedbackEnabled)
             .frame(maxWidth: 240)
         }
     }

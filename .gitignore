@@ -11,3 +11,6 @@ xcuserdata/
 .swiftpm/
 .build/
 Octopus/Info.plist
+
+# Release artifacts (DMGs live in GitHub releases only)
+*.dmg

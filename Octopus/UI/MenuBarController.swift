@@ -87,7 +87,7 @@ final class MenuBarController: ObservableObject {
             let window = NSWindow(contentViewController: hosting)
             window.title = "Octopus Settings"
             window.styleMask = [.titled, .closable, .miniaturizable]
-            window.setContentSize(NSSize(width: 680, height: 640))
+            window.setContentSize(NSSize(width: 800, height: 700))
             window.isReleasedWhenClosed = false
             window.isRestorable = false
             window.center()

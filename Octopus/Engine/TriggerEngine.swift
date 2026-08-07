@@ -17,6 +17,7 @@ public final class TriggerEngine: ObservableObject {
     public var dwellThreshold: TimeInterval = 0.35
     public var dwellOverride: ((ScreenZone) -> TimeInterval?)?
     public var onZoneTrigger: ((ScreenZone) -> Void)?
+    public var onDwellProgress: ((ScreenZone, Double) -> Void)?
 
     public var triggerCooldown: TimeInterval = 8
     private var lastTriggerDate: [ScreenZone: Date] = [:]
@@ -143,14 +144,31 @@ public final class TriggerEngine: ObservableObject {
         dwellTimer?.invalidate()
         pendingZone = zone
         let threshold = dwellOverride?(zone) ?? dwellThreshold
-        dwellTimer = Timer.scheduledTimer(withTimeInterval: threshold, repeats: false) { [weak self] _ in
+        let startDate = Date()
+        dwellTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
 
-                if Self.isPoint(in: zone, at: NSEvent.mouseLocation) {
-                    self.fire(zone)
+                let timeRemaining = threshold - Date().timeIntervalSince(startDate)
+
+                if !Self.isPoint(in: zone, at: NSEvent.mouseLocation) {
+                    self.resetDwell()
+                    return
                 }
-                self.resetDwell()
+
+                if timeRemaining <= 0 {
+                    self.dwellTimer?.invalidate()
+                    self.dwellTimer = nil
+                    self.pendingZone = nil
+                    if Self.isPoint(in: zone, at: NSEvent.mouseLocation) {
+                        self.fire(zone)
+                    }
+                    self.resetDwell()
+                    return
+                }
+
+                let progress = min(max(1 - (timeRemaining / threshold), 0), 1)
+                self.onDwellProgress?(zone, progress)
             }
         }
     }
@@ -173,10 +191,15 @@ public final class TriggerEngine: ObservableObject {
     }
 
     private func resetDwell() {
+        let dwelledZone = pendingZone
+        let wasDwelling = dwellTimer?.isValid == true
         dwellTimer?.invalidate()
         dwellTimer = nil
         pendingZone = nil
         activeZone = nil
         currentActiveZone = nil
+        if wasDwelling, let dwelledZone {
+            onDwellProgress?(dwelledZone, 0)
+        }
     }
 }

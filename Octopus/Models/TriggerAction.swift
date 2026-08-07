@@ -35,15 +35,15 @@ public enum SystemAction: String, CaseIterable, Identifiable, Codable, Sendable 
         case .apps:
             NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Apps.app"))
         case .showDesktop:
-            Self.postKey(code: 103, flags: [])           // F11
+            Self.postKey(code: 103, flags: [])
         case .startScreenSaver:
             NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Library/CoreServices/ScreenSaverEngine.app"))
         case .lockScreen:
-            Self.postKey(code: 12, flags: [.maskControl, .maskCommand]) // Ctrl+Cmd+Q
+            Self.postKey(code: 12, flags: [.maskControl, .maskCommand])
         case .sleepDisplay:
             Self.runProcess("/usr/bin/pmset", ["displaysleepnow"])
         case .controlCenter:
-            Self.postKey(code: 8, flags: .maskSecondaryFn) // Fn+C (macOS 26 default)
+            Self.postKey(code: 8, flags: .maskSecondaryFn)
         }
     }
 
