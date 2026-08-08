@@ -40,6 +40,15 @@ public final class TriggerEngine: ObservableObject {
                 if !CFMachPortIsValid(tap) {
                     NSLog("[Octopus] event tap invalid, restarting")
                     self.restartTap()
+                } else if !CGEvent.tapIsEnabled(tap: tap) {
+                    // Port can stay valid while macOS has disabled the tap
+                    // (timeout/user-input disable). Recover, or rebuild.
+                    NSLog("[Octopus] event tap disabled, re-enabling")
+                    CGEvent.tapEnable(tap: tap, enable: true)
+                    if !CGEvent.tapIsEnabled(tap: tap) {
+                        NSLog("[Octopus] event tap could not be re-enabled, restarting")
+                        self.restartTap()
+                    }
                 }
             }
         }
@@ -57,9 +66,20 @@ public final class TriggerEngine: ObservableObject {
         let mask = CGEventMask(1 << CGEventType.mouseMoved.rawValue)
             | CGEventMask(1 << CGEventType.leftMouseDragged.rawValue)
 
-        let callback: CGEventTapCallBack = { _, _, event, refcon in
+        let callback: CGEventTapCallBack = { _, type, event, refcon in
             guard let refcon else { return Unmanaged.passUnretained(event) }
             let engine = Unmanaged<TriggerEngine>.fromOpaque(refcon).takeUnretainedValue()
+
+            // macOS silently disables the tap when the callback is slow
+            // (heavy load, wake from sleep) and delivers these final events.
+            // Re-enable immediately or the tap stays dead until recreated.
+            if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+                Task { @MainActor in
+                    engine.recoverTap()
+                }
+                return Unmanaged.passUnretained(event)
+            }
+
             let location = NSEvent.mouseLocation
             Task { @MainActor in
                 engine.evaluateMousePosition(location)
@@ -102,6 +122,15 @@ public final class TriggerEngine: ObservableObject {
         teardownTap()
         if !createTap() {
             isMonitoring = false
+        }
+    }
+
+    private func recoverTap() {
+        guard isMonitoring, let tap = eventTap else { return }
+        CGEvent.tapEnable(tap: tap, enable: true)
+        if !CGEvent.tapIsEnabled(tap: tap) {
+            NSLog("[Octopus] event tap could not be re-enabled, restarting")
+            restartTap()
         }
     }
 
