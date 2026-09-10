@@ -43,7 +43,7 @@ struct SettingsView: View {
         }
         .task {
 
-            while !Task.isCancelled {
+            @MainActor func refresh() {
                 let current = ZoneStore.checkAccessibilityPermission()
                 if current != trusted {
                     let wasTrusted = trusted
@@ -53,8 +53,25 @@ struct SettingsView: View {
                 }
                 let login = SMAppService.mainApp.status == .enabled
                 if login != atLogin { atLogin = login }
-                try? await Task.sleep(for: .seconds(2))
             }
+
+            refresh()
+
+            let center = NotificationCenter.default
+            let activeObserver = center.addObserver(
+                forName: NSApplication.didBecomeActiveNotification,
+                object: nil,
+                queue: .main
+            ) { _ in
+                refresh()
+            }
+
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(5))
+                refresh()
+            }
+
+            center.removeObserver(activeObserver)
         }
     }
 

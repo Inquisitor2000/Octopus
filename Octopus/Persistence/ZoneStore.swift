@@ -174,6 +174,10 @@ final class ZoneStore: ObservableObject {
         engineCancellable = engine.$currentActiveZone
             .receive(on: DispatchQueue.main)
             .sink { [weak self] zone in self?.activeZone = zone }
+        engine.onDwellProgress = { [weak self] zone, progress in
+            guard let self else { return }
+            self.feedback.showProgress(zone: zone, progress: progress)
+        }
     }
 
     private func seedIfNeeded() {

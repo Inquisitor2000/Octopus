@@ -21,6 +21,13 @@ Hot corners for your whole screen. Hover the cursor in any of 8 zones — Octopu
 - **Menu bar only** — no Dock icon; optional launch at login
 - **Vector icon** — the octopus is a true SVG, rendered crisply at every size
 
+## Performance
+
+- **Region-focused monitoring** — the cursor is evaluated only against the zones' screen-edge regions; zone geometry is cached and rebuilt only when your display layout changes
+- **Event-driven dwell** — no timers run while the cursor rests in a zone; dwell completion and cancellation are driven by the cursor events themselves
+- **Throttled hot path** — per-mouse-event overhead is stripped from the event tap; no polling loops, no background threads
+- **Charging Dwell Glow** — the glow charges in sync with cursor movement and stays silent while the cursor is still
+
 ## Assigning an action
 
 Open **Settings** from the Octopus menu bar icon, then drag any app, file, folder, or script onto one of the eight zones. Prefer a built-in action? Pick one from the system-actions dropdown in the same editor.

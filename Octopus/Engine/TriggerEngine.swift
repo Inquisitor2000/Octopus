@@ -11,6 +11,8 @@ public final class TriggerEngine: ObservableObject {
     private var dwellTimer: Timer?
     private var activeZone: ScreenZone?
     private var pendingZone: ScreenZone?
+    private var dwellStartDate: Date?
+    private var lastMousePoint = NSPoint.zero
     private var watchdogTimer: Timer?
     private var lastEvaluation = Date.distantPast
 
@@ -22,7 +24,35 @@ public final class TriggerEngine: ObservableObject {
     public var triggerCooldown: TimeInterval = 8
     private var lastTriggerDate: [ScreenZone: Date] = [:]
 
-    public init() {}
+    private var zoneRectsCache: [CGRect: [ScreenZone: CGRect]] = [:]
+    private var screenChangeObserver: NSObjectProtocol?
+
+    public init() {
+        screenChangeObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.zoneRectsCache.removeAll()
+            }
+        }
+    }
+
+    deinit {
+        MainActor.assumeIsolated {
+            if let observer = screenChangeObserver {
+                NotificationCenter.default.removeObserver(observer)
+            }
+        }
+    }
+
+    private func zoneRects(for frame: CGRect) -> [ScreenZone: CGRect] {
+        if let cached = zoneRectsCache[frame] { return cached }
+        let rects = Dictionary(uniqueKeysWithValues: ScreenZone.allCases.map { ($0, ZoneGeometry.rect(for: $0, in: frame)) })
+        zoneRectsCache[frame] = rects
+        return rects
+    }
 
     public func startMonitoring() {
         stopMonitoring()
@@ -81,7 +111,10 @@ public final class TriggerEngine: ObservableObject {
             }
 
             let location = NSEvent.mouseLocation
-            Task { @MainActor in
+            // The tap's CFRunLoopSource is added to the main run loop
+            // (see createTap), so this callback already runs on the main
+            // thread. assumeIsolated avoids allocating a Task per mouse event.
+            MainActor.assumeIsolated {
                 engine.evaluateMousePosition(location)
             }
             return Unmanaged.passUnretained(event)
@@ -138,15 +171,31 @@ public final class TriggerEngine: ObservableObject {
         let now = Date()
         guard now.timeIntervalSince(lastEvaluation) >= 0.01 else { return }
         lastEvaluation = now
+        lastMousePoint = point
 
         guard let screen = ZoneGeometry.screen(containing: point) else {
-            clearActive()
+            resetDwell()
             return
         }
 
-        let matchingZone = ScreenZone.allCases.first { zone in
-            ZoneGeometry.rect(for: zone, in: screen.frame).contains(point)
+        let rects = zoneRects(for: screen.frame)
+
+        var minX = CGFloat.greatestFiniteMagnitude
+        var minY = CGFloat.greatestFiniteMagnitude
+        var maxX = -CGFloat.greatestFiniteMagnitude
+        var maxY = -CGFloat.greatestFiniteMagnitude
+        for r in rects.values {
+            minX = min(minX, r.minX)
+            minY = min(minY, r.minY)
+            maxX = max(maxX, r.maxX)
+            maxY = max(maxY, r.maxY)
         }
+        if point.x < minX || point.x > maxX || point.y < minY || point.y > maxY {
+            resetDwell()
+            return
+        }
+
+        let matchingZone = ScreenZone.allCases.first { rects[$0]!.contains(point) }
 
         if let zone = matchingZone {
             if activeZone != zone {
@@ -158,11 +207,13 @@ public final class TriggerEngine: ObservableObject {
                 } else {
                     startDwellTimer(for: zone)
                 }
+            } else if let start = dwellStartDate, pendingZone == zone {
+                let threshold = dwellOverride?(zone) ?? dwellThreshold
+                let progress = min(max(now.timeIntervalSince(start) / threshold, 0), 1)
+                onDwellProgress?(zone, progress)
             }
-
         } else {
-
-            clearActive()
+            resetDwell()
         }
     }
 
@@ -172,32 +223,20 @@ public final class TriggerEngine: ObservableObject {
 
         dwellTimer?.invalidate()
         pendingZone = zone
+        dwellStartDate = Date()
         let threshold = dwellOverride?(zone) ?? dwellThreshold
-        let startDate = Date()
-        dwellTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+        dwellTimer = Timer.scheduledTimer(withTimeInterval: threshold, repeats: false) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-
-                let timeRemaining = threshold - Date().timeIntervalSince(startDate)
-
-                if !Self.isPoint(in: zone, at: NSEvent.mouseLocation) {
-                    self.resetDwell()
-                    return
+                let completionZone = self.pendingZone
+                self.dwellTimer?.invalidate()
+                self.dwellTimer = nil
+                self.pendingZone = nil
+                self.dwellStartDate = nil
+                if let completionZone, Self.isPoint(in: completionZone, at: self.lastMousePoint) {
+                    self.fire(completionZone)
                 }
-
-                if timeRemaining <= 0 {
-                    self.dwellTimer?.invalidate()
-                    self.dwellTimer = nil
-                    self.pendingZone = nil
-                    if Self.isPoint(in: zone, at: NSEvent.mouseLocation) {
-                        self.fire(zone)
-                    }
-                    self.resetDwell()
-                    return
-                }
-
-                let progress = min(max(1 - (timeRemaining / threshold), 0), 1)
-                self.onDwellProgress?(zone, progress)
+                self.resetDwell()
             }
         }
     }
@@ -214,17 +253,13 @@ public final class TriggerEngine: ObservableObject {
         onZoneTrigger?(zone)
     }
 
-    private func clearActive() {
-        activeZone = nil
-        currentActiveZone = nil
-    }
-
     private func resetDwell() {
         let dwelledZone = pendingZone
         let wasDwelling = dwellTimer?.isValid == true
         dwellTimer?.invalidate()
         dwellTimer = nil
         pendingZone = nil
+        dwellStartDate = nil
         activeZone = nil
         currentActiveZone = nil
         if wasDwelling, let dwelledZone {
