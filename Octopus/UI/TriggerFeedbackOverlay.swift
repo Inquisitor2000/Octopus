@@ -262,17 +262,17 @@ struct FeedbackLayerView: View {
 }
 
 @MainActor
-final class TriggerFeedbackManager {
+final class TriggerFeedbackManager: NSObject, NSSoundDelegate {
     private weak var store: ZoneStore?
     private var states: [String: ScreenEffectState] = [:]
     private var windows: [String: NSWindow] = [:]
     private var hideWork: [String: DispatchWorkItem] = [:]
     private var activeSounds: [NSSound] = []
     private var screenObserver: NSObjectProtocol?
-    private var soundObserver: NSObjectProtocol?
 
     init(store: ZoneStore) {
         self.store = store
+        super.init()
         rebuild()
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
@@ -283,25 +283,11 @@ final class TriggerFeedbackManager {
                 self?.rebuild()
             }
         }
-        soundObserver = NotificationCenter.default.addObserver(
-            forName: Notification.Name("NSSoundDidFinishPlaying"),
-            object: nil,
-            queue: .main
-        ) { [weak self] note in
-            let finishedID = (note.object as? NSSound).map { ObjectIdentifier($0) }
-            Task { @MainActor in
-                guard let self, let id = finishedID,
-                      let index = self.activeSounds.firstIndex(where: { ObjectIdentifier($0) == id })
-                else { return }
-                self.activeSounds.remove(at: index)
-            }
-        }
     }
 
     deinit {
         MainActor.assumeIsolated {
             if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
-            if let soundObserver { NotificationCenter.default.removeObserver(soundObserver) }
         }
     }
 
@@ -365,8 +351,13 @@ final class TriggerFeedbackManager {
         }
         guard let player else { return }
         player.volume = Float(store?.soundVolume ?? 0.7)
+        player.delegate = self
         player.play()
         activeSounds.append(player)
+    }
+
+    func sound(_ sound: NSSound, didFinishPlaying flag: Bool) {
+        activeSounds.removeAll { ObjectIdentifier($0) == ObjectIdentifier(sound) }
     }
 
     func hideAll() {

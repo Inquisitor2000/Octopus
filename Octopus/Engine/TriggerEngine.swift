@@ -64,15 +64,13 @@ public final class TriggerEngine: ObservableObject {
 
         isMonitoring = true
 
-        watchdogTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
+        watchdogTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self, self.isMonitoring, let tap = self.eventTap else { return }
                 if !CFMachPortIsValid(tap) {
                     NSLog("[Octopus] event tap invalid, restarting")
                     self.restartTap()
                 } else if !CGEvent.tapIsEnabled(tap: tap) {
-                    // Port can stay valid while macOS has disabled the tap
-                    // (timeout/user-input disable). Recover, or rebuild.
                     NSLog("[Octopus] event tap disabled, re-enabling")
                     CGEvent.tapEnable(tap: tap, enable: true)
                     if !CGEvent.tapIsEnabled(tap: tap) {
@@ -100,9 +98,6 @@ public final class TriggerEngine: ObservableObject {
             guard let refcon else { return Unmanaged.passUnretained(event) }
             let engine = Unmanaged<TriggerEngine>.fromOpaque(refcon).takeUnretainedValue()
 
-            // macOS silently disables the tap when the callback is slow
-            // (heavy load, wake from sleep) and delivers these final events.
-            // Re-enable immediately or the tap stays dead until recreated.
             if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
                 Task { @MainActor in
                     engine.recoverTap()
@@ -111,9 +106,6 @@ public final class TriggerEngine: ObservableObject {
             }
 
             let location = NSEvent.mouseLocation
-            // The tap's CFRunLoopSource is added to the main run loop
-            // (see createTap), so this callback already runs on the main
-            // thread. assumeIsolated avoids allocating a Task per mouse event.
             MainActor.assumeIsolated {
                 engine.evaluateMousePosition(location)
             }

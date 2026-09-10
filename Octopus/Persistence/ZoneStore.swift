@@ -118,10 +118,11 @@ final class ZoneStore: ObservableObject {
     init() {
         let schema = Schema([ZoneAssignment.self])
         do {
-            container = try ModelContainer(for: schema,
-                                           configurations: [ModelConfiguration("Octopus", schema: schema)])
+            container = try ModelContainer(for: schema, configurations: [ModelConfiguration("Octopus", schema: schema)])
         } catch {
-            fatalError("[Octopus] Failed to create SwiftData container: \(error)")
+            NSLog("[Octopus] SwiftData container failed (%@); falling back to in-memory store", error.localizedDescription)
+            container = try! ModelContainer(for: schema,
+                                            configurations: [ModelConfiguration("Octopus", schema: schema, isStoredInMemoryOnly: true)])
         }
         context = container.mainContext
 

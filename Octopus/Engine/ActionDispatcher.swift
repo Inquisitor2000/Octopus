@@ -14,7 +14,6 @@ public enum ActionDispatcher {
                     process.arguments = [action.path]
                     do {
                         try process.run()
-                        process.waitUntilExit()
                     } catch {
                         NSLog("[Octopus] Script execution failed: %@", error.localizedDescription)
                     }
