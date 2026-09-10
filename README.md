@@ -23,10 +23,18 @@ Hot corners for your whole screen. Hover the cursor in any of 8 zones — Octopu
 
 ## Performance
 
-- **Region-focused monitoring** — the cursor is evaluated only against the zones' screen-edge regions; zone geometry is cached and rebuilt only when your display layout changes
-- **Event-driven dwell** — no timers run while the cursor rests in a zone; dwell completion and cancellation are driven by the cursor events themselves
-- **Throttled hot path** — per-mouse-event overhead is stripped from the event tap; no polling loops, no background threads
-- **Charging Dwell Glow** — the glow charges in sync with cursor movement and stays silent while the cursor is still
+Octopus is built to sit quietly in the background — at rest it uses effectively no CPU at all.
+
+- **Zero work while idle** — when the cursor is still, nothing runs. No timers, no polling loops, no background threads ticking away a cost nobody asked for.
+- **Event-driven, not sampled** — Octopus is driven by mouse-move events themselves; it never samples the cursor position on a schedule. One event in, one evaluation out.
+- **Region-focused evaluation** — only the thin screen-edge strips and corner squares that can actually trigger are ever tested. A single bounding-box check dismisses the whole screen in a handful of comparisons; the 8-zone detail pass runs only when the cursor is truly near an edge.
+- **Cached zone geometry** — trigger regions are computed once per display layout and reused at full speed; they rebuild only when you add, remove, or rearrange a monitor.
+- **Throttled hot path** — the per-event overhead is allocation-free and rate-limited, so the cursor cannot spin it faster than it needs to run.
+- **True dwell, no inventory** — the optional dwell delay is one one-shot timer that exists only while you are actually holding in a zone, and is cancelled the instant you move elsewhere. The charging glow tracks your cursor in real time and stays silent while you hold still.
+- **Self-healing input monitoring** — if macOS ever suspends input monitoring (screen lock, wake from sleep), Octopus detects it and re-enables itself within seconds, so hot corners still respond when you come back.
+- **Lazy settings UI** — preference status refreshes on window activation and a slow background cadence, not a tight poll while you work.
+
+On any modern Mac the app idles near 0% CPU and only does measurable work while your cursor is actually crossing into a trigger zone.
 
 ## Assigning an action
 
